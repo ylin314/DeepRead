@@ -17,9 +17,7 @@ description: "按固定流程深度阅读一篇论文，依次完成关键章节
 
 ## 输出
 
-- `outputs/<slug>/stage1_translation.md`
-- `outputs/<slug>/stage2_rq_explanation.md`
-- `outputs/<slug>/stage3_reflection.md`
+- `outputs/<slug>/deepread.md`
 
 ## 阶段门控
 
@@ -38,8 +36,16 @@ description: "按固定流程深度阅读一篇论文，依次完成关键章节
 
 1. 确认论文文件可访问。
 2. 生成本次阅读 slug，例如 `paper-2026-xxx`。
-3. 创建输出目录和三个阶段文件。
-4. 向用户确认：
+3. 创建输出目录和本报告文件。
+4. 先填写论文基本信息，包括：
+   - 英文原名
+   - 中文名
+   - 发表日期
+   - 期刊 / 会议 / arXiv
+   - 作者
+   - 作者单位
+   - DOI
+5. 向用户确认：
    - “我将按 deepread 流程进行，是否继续？”
    - “翻译粒度希望是段落级还是逐句对照？”
 
@@ -54,8 +60,6 @@ description: "按固定流程深度阅读一篇论文，依次完成关键章节
 - 先输出翻译草稿，不要直接解释创新点。
 - 若用户提供原文，先基于原文做，不要跳过原文。
 - 用户亲自阅读原文后，再继续下一步。
-
-输出模板：`templates/stage1_translation.md`
 
 完成后追问：
 - “这一部分是否准确？”
@@ -72,8 +76,6 @@ description: "按固定流程深度阅读一篇论文，依次完成关键章节
    - 再讲解原文中对应的实验 / 结果
    - 用户读完或确认理解后，再给出 AI 总结
 4. 每个 RQ 都要单独成节。
-
-输出模板：`templates/stage2_rq_explain.md`
 
 完成后追问：
 - “这个方法部分是否清晰？”
@@ -93,14 +95,10 @@ description: "按固定流程深度阅读一篇论文，依次完成关键章节
 - 每个问题都要引用论文具体证据
 - 如果用户后面说“基于这篇我想到了”，AI 可以记录，但不能主动生成 idea
 
-输出模板：`templates/stage3_reflection.md`
-
 ## 第五步：收尾
 
 输出最终文件清单：
-- `stage1_translation.md`
-- `stage2_rq_explanation.md`
-- `stage3_reflection.md`
+- `deepread.md`
 
 提醒用户：
 - 本次输出仅用于你自己吸收
