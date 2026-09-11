@@ -7,11 +7,11 @@ description: "按固定流程深度阅读论文，依次完成关键章节翻译
 
 ## 目标
 
-把一篇论文按固定三步流程结构化读完，形成你自己的理解，而不是只看 AI 总结。
+把一篇论文按固定流程结构化读完，形成你自己的理解，而不是只看 AI 总结。
 
 ## PDF 读取协议（强制）
 
-当输入是 PDF 时，先查找本地有没有 PDF 相关 Skill。如果有的话，优先使用阅读 PDF 的 Skill。如果没有，再使用本 Skill 自带的提取器，不要临时编写 Python 或其他 PDF 解析代码。下面是自带提取器的使用方法，如果使用本地 PDF Skill，请忽略。
+输入是 PDF 时，**必须**使用本 skill 自带提取器。不要改用本地通用 PDF skill，也不要临时编写 Python / pdfplumber / pypdf 解析代码。通用 PDF skill 的默认抽取会把 ACM 双栏论文抽成无空格粘连文本。
 
 以下命令中的 `<skill-dir>` 指当前 `SKILL.md` 所在目录。
 
@@ -21,17 +21,40 @@ description: "按固定流程深度阅读论文，依次完成关键章节翻译
    python -m pip install -r "<skill-dir>/requirements.txt"
    ```
 
-2. 运行固定的 PDF 入口：
+2. 运行固定入口：
 
    ```bash
    python "<skill-dir>/scripts/extract_pdf.py" "<PDF 路径>" --output "<输出目录>/<PDF 文件名>.extracted.md"
    ```
 
 3. 等待命令成功并出现 `[DeepRead_PDF_READY]`，然后读取生成的提取文件。
-4. 后续填写论文信息、翻译和逐 RQ 讲解都必须基于该提取文件；引用原文时保留其中的页码标记。
-5. 如果提取器报告 PDF 无可提取文字，停止并告诉用户该文件可能是扫描件、需要 OCR。不要自行改写成另一段临时解析代码。
+4. 用 Python 打开提取文件时指定 `encoding="utf-8"`。不要把提取正文或中文 print 到终端来判断编码。
+5. 后续填写论文信息、翻译和逐 RQ 讲解都必须基于该提取文件；引用原文时保留其中的页码标记。
+6. 如果提取器报告 PDF 无可提取文字，停止并告诉用户该文件可能是扫描件、需要 OCR。不要自行改写成另一段临时解析代码。
+7. 如果 stderr 出现 `[DeepRead_PDF_SPACING_WARN]`，继续基于该提取文件工作，并在收尾时注明英文词距可能仍偏紧。不要为此再写解析代码。
 
 如果输入已经是 Markdown、纯文本或用户直接粘贴的正文，则跳过本节。
+
+## 执行约束（强制，防卡住）
+
+这些规则就是为了避免在“写文件 / 终端乱码”上空转。
+
+1. 报告只写一个 UTF-8 文件：`outputs/<安全论文英文名>_DeepRead.md`。安全名只保留字母、数字、空格、点、下划线和连字符；把 `'`、`’`、`‘` 等撇号去掉。需要时运行：
+
+   ```bash
+   python "<skill-dir>/scripts/check_report.py" --suggest-name "<论文英文名>"
+   ```
+
+2. 不要把报告正文嵌进 `python -c`、PowerShell here-string 套 Python、或终端一次性粘贴。用文件写入工具直接写目标 `.md`，或先把内容落到磁盘再复制到目标路径。
+3. 写完后只运行：
+
+   ```bash
+   python "<skill-dir>/scripts/check_report.py" "<报告路径>"
+   ```
+
+   只看脚本打印的 `OK` / `MISSING` / `[DeepRead_REPORT_READY]`。不要把报告正文 print 到终端。Windows 终端用系统代码页显示 UTF-8 中文时会看起来像乱码，那不是文件损坏。
+4. 出现 `[DeepRead_REPORT_READY]` 后立即收尾：给出文件路径，提醒用户读摘要 / 引言 / 结论。不要再抽 PDF，不要再为编码循环检查。
+5. 若打印 `[DeepRead_REPORT_INCOMPLETE]`，只补缺失标题对应的内容，再跑一次检查，然后停止。
 
 ## 输入
 
@@ -41,7 +64,7 @@ description: "按固定流程深度阅读论文，依次完成关键章节翻译
 
 ## 输出
 
-- 输出目录：`outputs/<论文英文名>_DeepRead.md`
+- 输出目录：`outputs/<安全论文英文名>_DeepRead.md`
 - 输出模板：`templates/DeepRead.md`
 
 ## 边界
@@ -53,7 +76,7 @@ description: "按固定流程深度阅读论文，依次完成关键章节翻译
 ## 第一步：初始化
 
 1. 确认论文文件可访问。
-2. 创建输出目录和本报告文件。
+2. 创建输出目录。
 3. 先填写论文基本信息，包括：
    - 英文原名
    - 中文名
@@ -83,7 +106,7 @@ description: "按固定流程深度阅读论文，依次完成关键章节翻译
    - 最后再给出 AI 总结
 4. 每个 RQ 都要单独成节，且 RQ 的内容要与原文英文翻译保持一致。
 
-## 第五步：阶段三 — 翻译并总结 related work
+## 第四步：阶段三 — 翻译并总结 related work
 
 1. 不需要 related work 的英文原文
 2. 直接给出 related work 的中文翻译
@@ -102,11 +125,14 @@ description: "按固定流程深度阅读论文，依次完成关键章节翻译
 
 ## 第六步：收尾
 
-输出最终文件清单：
-- `<论文英文名>_DeepRead.md`
+运行 `scripts/check_report.py`。看到 `[DeepRead_REPORT_READY]` 后，输出最终文件清单：
+
+- `<安全论文英文名>_DeepRead.md`
 
 提醒用户：
 - 本 Skill 以人为中心，建议人工阅读引言、摘要、结论部分
+
+然后停止。
 
 ## 触发方式
 
@@ -115,5 +141,8 @@ description: "按固定流程深度阅读论文，依次完成关键章节翻译
 
 ## 禁止行为
 
-- 不在阶段三主动生成研究 idea
+- 不在阶段四主动生成研究 idea
 - 不跳过任何阶段
+- 不改用通用 PDF skill 抽取论文
+- 不把报告或提取正文打印到终端做编码检查
+- 不在 `[DeepRead_REPORT_READY]` 之后继续抽取或循环验证

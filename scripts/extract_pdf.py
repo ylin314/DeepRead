@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import os
 import re
 import sys
 from datetime import datetime
@@ -14,6 +13,7 @@ from typing import Any
 
 
 MIN_VALID_CHARS = 100
+GLUED_SPACE_RATIO = 0.05
 METADATA_FIELDS = {
     "title": ("/Title", "Title", "title"),
     "author": ("/Author", "Author", "author"),
@@ -22,6 +22,12 @@ METADATA_FIELDS = {
     "producer": ("/Producer", "Producer", "producer"),
     "creation_date": ("/CreationDate", "CreationDate", "creation_date"),
 }
+PDFPLUMBER_ATTEMPTS: tuple[dict[str, float], ...] = (
+    {"x_tolerance": 1, "y_tolerance": 3},
+    {"x_tolerance": 2, "y_tolerance": 3},
+    {"x_tolerance": 3, "y_tolerance": 3},
+    {},
+)
 
 
 class ExtractionError(RuntimeError):
@@ -36,6 +42,62 @@ def clean_text(value: Any) -> str:
     if value is None:
         return ""
     return str(value).replace("\x00", "").strip()
+
+
+def latin_letter_count(text: str) -> int:
+    return sum(ch.isascii() and ch.isalpha() for ch in text)
+
+
+def space_count(text: str) -> int:
+    return sum(ch.isspace() for ch in text)
+
+
+def latin_space_ratio(text: str) -> float:
+    letters = latin_letter_count(text)
+    if letters == 0:
+        return 0.0
+    return space_count(text) / letters
+
+
+def is_latin_heavy(text: str) -> bool:
+    return latin_letter_count(text) >= 200
+
+
+def spacing_score(text: str) -> float:
+    """Prefer readable English spacing without rewarding huge layout gaps."""
+    letters = latin_letter_count(text)
+    if letters < 50:
+        return float(len(text))
+    ratio = latin_space_ratio(text)
+    if ratio < GLUED_SPACE_RATIO:
+        return ratio
+    return min(ratio, 0.30) + min(len(text), 8000) / 200000.0
+
+
+def spacing_quality(pages: list[str]) -> str:
+    joined = "\n".join(pages)
+    if not is_latin_heavy(joined):
+        return "n/a"
+    if latin_space_ratio(joined) < GLUED_SPACE_RATIO:
+        return "latin-glued"
+    return "ok"
+
+
+def extract_page_text(page: Any) -> str:
+    candidates: list[str] = []
+    for kwargs in PDFPLUMBER_ATTEMPTS:
+        try:
+            raw = page.extract_text(**kwargs) if kwargs else page.extract_text()
+        except TypeError:
+            raw = page.extract_text()
+        text = clean_text(raw or "")
+        if text:
+            candidates.append(text)
+    if not candidates:
+        return ""
+    if any(is_latin_heavy(text) for text in candidates):
+        return max(candidates, key=spacing_score)
+    return max(candidates, key=len)
 
 
 def normalize_metadata(raw_metadata: Any) -> dict[str, str]:
@@ -61,7 +123,7 @@ def extract_with_pdfplumber(pdf_path: Path) -> tuple[list[str], dict[str, str]]:
     pages: list[str] = []
     with pdfplumber.open(str(pdf_path)) as pdf:
         for page in pdf.pages:
-            pages.append(clean_text(page.extract_text() or ""))
+            pages.append(extract_page_text(page))
         metadata = normalize_metadata(pdf.metadata)
     return pages, metadata
 
@@ -131,7 +193,11 @@ def extract_pdf(
 
 
 def safe_stem(pdf_path: Path) -> str:
-    stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", pdf_path.stem).strip(" .")
+    stem = pdf_path.stem
+    for mark in ("'", "‘", "’", "‛", "`"):
+        stem = stem.replace(mark, "")
+    stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", stem)
+    stem = re.sub(r"\s+", " ", stem).strip(" .")
     return stem[:160] or "paper"
 
 
@@ -154,6 +220,7 @@ def render_markdown(
     metadata: dict[str, str],
 ) -> str:
     generated_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    quality = spacing_quality(pages)
     lines = [
         "# PDF 提取文本",
         "",
@@ -161,6 +228,7 @@ def render_markdown(
         f"- 页数：{len(pages)}",
         f"- 提取器：`{extractor}`",
         f"- 提取时间：`{generated_at}`",
+        f"- 空格质量：`{quality}`",
     ]
 
     if metadata:
@@ -240,6 +308,12 @@ def main() -> int:
         encoding="utf-8",
     )
 
+    quality = spacing_quality(pages)
+    if quality == "latin-glued":
+        print(
+            f"[DeepRead_PDF_SPACING_WARN] {output_path.resolve()}",
+            file=sys.stderr,
+        )
     print(f"[DeepRead_PDF_READY] {output_path.resolve()}")
     return 0
 
